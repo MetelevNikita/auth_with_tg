@@ -1,0 +1,278 @@
+import TelegramBot from 'node-telegram-bot-api'
+import {prisma} from '@/lib/prisma'
+
+
+declare global {
+  var botAuth: TelegramBot
+  var botAuthListenersReady: boolean | undefined
+}
+
+
+export async function telegramBotAuth (token: string) {
+
+
+
+  if (!token) {
+    throw new Error(`Не передан telegram bot`)
+  }
+
+  if (!globalThis.botAuth) {
+    console.log('Бот не создан, создаем')
+    globalThis.botAuth = new TelegramBot(token, {polling: true})
+  }
+
+
+  // 
+
+
+  if (!globalThis.botListenersReady) {
+
+
+  globalThis.botAuth.on('message', async (msg) => {
+    const text = msg.text
+    const id = msg.chat.id
+
+    console.log(id)
+
+    console.log('ID ENV ', process.env.ID_ADMIN_GROUP)
+
+
+
+    if (id.toString() !== process.env.ID_ADMIN_GROUP as number | string) {
+      console.log('Не админская группа')
+      return
+    }
+
+    await globalThis.botAuth.setMyCommands([
+      { command: 'start', description: 'Start bot' },
+      { command: 'help', description: 'Help' },
+    ])
+
+    if (text === '/start') {
+      botAuth.sendMessage(id, 'Админ бот приложения PR-TZ.ru', {
+        reply_markup: {
+          keyboard: [
+            [{ text: 'Получить список пользователей' }],
+            [{ text: 'Удалить пользователя' }],
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        }
+      })
+    }
+
+    if (text === 'Получить список пользователей') {
+      console.log('Нажали')
+
+      const allUsers = await prisma.user.findMany()
+      console.log(allUsers)
+
+      allUsers.map((item: {id: number, name: string, email: string, сonfirmed: boolean, createAt: Date, }) => {
+
+        const message = `${item.name} - ${item.email} # Подтверждение ${(item.сonfirmed) ? 'Подтвержден' : 'Ожидает подтверждения'} - Дата создания ${new Date(item.createAt).toLocaleDateString('RU-ru')}`
+
+    
+        globalThis.botAuth.sendMessage(id, message, {
+          reply_markup: {
+            inline_keyboard: [
+              [{text: 'Удалить', callback_data: `${item.id}|DELETE|${item.name}`}],
+              [{text: 'Сенить пароль', callback_data: `${item.id}|RESET|${item.name}`}]
+            ]
+          }
+        })
+        return 
+      })
+    }
+
+
+  })
+
+   globalThis.botAuth.on('callback_query', async (query) => {
+
+      if (!query.message || !('text' in query.message) || !('chat' in query.message)) {
+        return
+      }
+
+      const chatId = query.message?.chat.id
+      const data = query.data?.split('|') as any
+      const text = query.message.text
+
+
+      const answer = data[2]
+      const method = data[1]
+      const id = data[0]
+
+      if (!text) {
+        return
+      }
+
+      switch (method) {
+        case 'CONFIRMED':
+          return await confimedUser()
+        case 'DELETE':
+          return await deleteUser()
+        case 'RESET':
+          return await resetUser()
+          
+      }
+
+      async function confimedUser () {
+
+        try {
+          
+          const currentUser = await prisma.user.findFirst({
+            where: {
+              id: parseInt(id)
+            }
+          })
+
+          if (!currentUser) {
+            console.error('Не найден пользователь в базе данных')
+            return
+          }
+
+          const updateUser = await prisma.user.update({
+            where: {
+              id: parseInt(id)
+            },
+            data: {
+              сonfirmed: true
+            }
+          })
+
+          if (updateUser) {
+
+            globalThis.botApp.sendMessage(currentUser.telegramId as string, `Пользователь id:${currentUser.id}#${currentUser.name} добавлен в систему\n\nВход разрешен\n\nПерезагрузите страницу входа`, {parse_mode: 'HTML'})
+
+            globalThis.botAuth.editMessageText({
+              parse_mode: 'HTML',
+              chat_id: query.message?.chat.id,
+              message_id: query.message?.message_id,
+              text: `Пользователь id: ${currentUser.id}#${currentUser.name as string} авторизован и добавлен в базу данных\n\n<b>Дата обработки\n${new Date().toLocaleDateString('RU-ru')} - ${new Date().toLocaleTimeString('RU-ru')}`
+            })
+
+            return
+
+          } else {
+            console.error('Ошибка отпраки')
+          }
+
+        } catch (error) {
+          console.error(error)
+          return `Ошбика смены статуса регистрации пользваотеля ${error}`
+        }
+      }
+
+      async function deleteUser () {
+
+
+        try {
+          
+            const checkUser = await prisma.user.findFirst({
+              where: {
+                id: parseInt(id)
+              }
+            })
+
+            if (!checkUser) {
+              console.log(`Ошибка удаления пользователя`)
+              globalThis.botAuth.sendMessage(chatId, 'Ошибка удаления пользователя')
+              return
+            }
+
+
+            const deleteUser = await prisma.user.delete({
+              where: {
+                id: parseInt(id)
+              }
+            })
+
+            console.log('Пользователь удален')
+
+            globalThis.botApp.sendMessage(checkUser.telegramId, `Администрация сайта pr-tz.ru удалили пользователя ${checkUser.name}\n\nЗа дополнительной информацией обратитесь в службу PR\n\nДата удаления ${new Date().toLocaleDateString('RU-ru')}`)
+
+
+            globalThis.botAuth.editMessageText({
+              chat_id: query.message?.chat.id,
+              message_id: query.message?.message_id,
+              text: `Пользователь ${id}#${answer} - Удален\nДата удаления - ${new Date().toLocaleDateString('RU-ru')}`
+            })
+
+        } catch (error) {
+          console.error(error)
+          return `Ошбика смены статуса регистрации пользваотеля ${error}`
+        }
+
+
+
+      }
+
+      async function resetUser () {
+
+        try {
+          
+          const checkUser = await prisma.user.findFirst({
+            where: {
+              id: parseInt(id)
+            }
+          })
+
+          if (!checkUser) {
+            console.log(`Ошибка смены статуса пользователя`)
+            globalThis.botAuth.sendMessage(chatId, 'Ошибка удаления пользователя')
+            return
+          }
+
+          const changeStatus = await prisma.user.update({
+            where: {
+              id: parseInt(id)
+            },
+            data: {
+              сonfirmed: false
+            }
+          })
+
+          if (!changeStatus) {
+
+            console.error('Ошибка смены статуса')
+            globalThis.botAuth.sendMessage(query.message?.chat.id as number | string, `Ошибка смены статуса пользователя ${id}#${answer}, попробуйте позже`)
+            return
+          }
+
+
+          globalThis.botApp.sendMessage(checkUser.telegramId, `Администрация сайта pr-tz.ru изменили стату регистрации пользователя ${checkUser.name}\n\nДоступ на сайт запрещен\n\nЗа дополнительной информацией обратитесь в службу PR\n\nДата удаления ${new Date().toLocaleDateString('RU-ru')}`)
+
+          globalThis.botAuth.editMessageText({
+            chat_id: query.message?.chat.id,
+            message_id: query.message?.message_id,
+            text: `Пользователь ${id}#${answer} - Изменен\n\nСтатус активации пользователя в системе - Ожидает подтверждения\nДата удаления - ${new Date().toLocaleDateString('RU-ru')}`
+          })
+
+
+
+
+        } catch (error) {
+          console.error(error)
+          return `Ошбика смены статуса регистрации пользваотеля ${error}`
+        }
+
+      }
+    })
+    
+
+    globalThis.botListenersReady = true
+  }
+
+
+
+
+  // 
+
+
+  const info = await globalThis.botAuth.getMe()
+
+  console.log(`Подключен бот ${info.username}`)
+  return globalThis.botAuth
+
+
+}
