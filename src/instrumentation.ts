@@ -10,28 +10,16 @@ export async function register() {
 
     const adminBot = async () => {
 
-      const TOKEN = process.env.TOKEN_AUTH as string
-      const { telegramBotAuth } = await import('./lib/telegramBotAdmin')
-      await telegramBotAuth(TOKEN)
+      const TOKEN = process.env.TOKEN as string
+      const { telegramBot } = await import('./lib/telegramBot')
+      await telegramBot(TOKEN) as any
+      
+      const infoBot = await globalThis.bot.getMe()
+      console.log(`work bot: ${infoBot.username}`)
 
     }
-
-
-    const appBot = async () => {
-            const TOKEN = process.env.TOKEN_APP as string
-      const { telegramBotApp } = await import('./lib/telegramBotApp')
-      await telegramBotApp(TOKEN)
-    }
-
 
     await adminBot()
-    await appBot()
-
-
-
-
-
-
 
   }
 

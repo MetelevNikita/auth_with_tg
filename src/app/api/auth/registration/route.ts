@@ -3,23 +3,17 @@ import bcrypt from 'bcrypt'
 
 // telegramBot
 
-import { telegramBotAuth } from "@/lib/telegramBotAdmin";
-import { telegramBotApp } from "@/lib/telegramBotApp";
+import { telegramBot } from "@/lib/telegramBot";
 
 // 
 
 import { prisma } from '../../../../lib/prisma'
+import TelegramBot from "node-telegram-bot-api";
 
 
 
 export const POST = async (req: NextRequest) => {
   try {
-
-    const TOKEN_Auth = process.env.TOKEN_AUTH 
-    const TOKEN_App = process.env.TOKEN_APP
-
-    const botAuth = await telegramBotAuth(TOKEN_Auth as string)
-    const botApp = await telegramBotApp(TOKEN_App as string)
 
     const {name, email, telegramId, loginCorp, password} = await req.json()
 
@@ -58,11 +52,11 @@ export const POST = async (req: NextRequest) => {
 
     // send to user
 
-    await botApp.sendMessage(telegramId, '<b>Вы успешно прошли регистрацию на сайте pr-tz.ru</b>\n\nУведомление о получения разрешения на вход в систему придет в телеграм боте', {parse_mode: 'HTML'})
+    await globalThis.bot.sendMessage(telegramId, '<b>Вы успешно прошли регистрацию на сайте pr-tz.ru</b>\n\nУведомление о получения разрешения на вход в систему придет в телеграм боте', {parse_mode: 'HTML'})
 
     // 
 
-    await botAuth.sendMessage(
+    await globalThis.bot.sendMessage(
       '-1004463734011',
       `<b>Заявка на регистрацию</b>\n\nНовый пользователь\n\n<b>Имя пользователя</b>\n${name}\n\n<b>TelegramId</b>\n${telegramId}\n\n<b>Почта</b>\n${email}\n\n<b>Имя пользователя на корпортаивном сайте</b>\n${loginCorp}\n\n<b>Дата регистрации</b>\n${new Date().toLocaleDateString('ru-RU')}`,
       {

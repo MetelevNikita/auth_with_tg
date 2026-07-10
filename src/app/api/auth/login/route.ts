@@ -58,12 +58,7 @@ export const POST = async (req: NextRequest) => {
       })
     }
 
-
-    console.log(authUser)
-
-    const token = jwt.sign({email: authUser.email}, '123', { expiresIn: '1h' })
-    console.log(token)
-
+    const token = jwt.sign({email: authUser.email}, process.env.JWT_SECRET as string, { expiresIn: '1h' })
 
     const res = NextResponse.json({
       success: true,
